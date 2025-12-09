@@ -112,8 +112,7 @@ def answer_query(query, data_dir):
         if pid in chunk_texts:
             cited_chunks.add(pid)
             context_items.append(
-                f"[Global chunk {pid}]: {chunk_texts[pid][:500]}"
-            )
+                f"[Global chunk {pid}]: {chunk_texts[pid][:500]}")
     # include top community summaries
     for cid, summ in list(community_summaries.items())[:CONFIG['global_top_k']]:
         context_items.append(f"[Community {cid} summary]: {summ[:800]}")
@@ -127,6 +126,97 @@ def answer_query(query, data_dir):
     print('\n=== Cited chunks ===\n')
     print('\n'.join(sorted(list(cited_chunks))))
 
+# Add this function near other helpers
+def load_artifacts(data_dir):
+    data_dir = Path(data_dir)
+    # load chunks (list of dicts)
+    with open(data_dir / 'chunks.json', 'r', encoding='utf-8') as f:
+        chunks = json.load(f)
+    # load KG
+    with open(data_dir / 'knowledge_graph.pkl', 'rb') as f:
+        kgdata = pickle.load(f)
+    kg = KnowledgeGraph()
+    kg.G = kgdata['graph']
+    kg.entity_chunks = kgdata['entity_chunks']
+    # load chunk embeddings and community data
+    chunk_embeddings = pickle.load(open(data_dir / 'chunk_embeddings.pkl', 'rb'))
+    commdata = pickle.load(open(data_dir / 'community_summaries.pkl', 'rb'))
+    community_summaries = commdata['summaries']
+    community_embeddings = commdata['emb']
+    # create a chunk_texts dict once
+    chunk_texts = {c['id']: c['text'] for c in chunks}
+
+    # create and return the shared components
+    return {
+        'chunks': chunks,
+        'chunk_texts': chunk_texts,
+        'kg': kg,
+        'chunk_embeddings': chunk_embeddings,
+        'community_summaries': community_summaries,
+        'community_embeddings': community_embeddings
+    }
+
+def query(data_dir):
+    print("\n AmbedkarGPT Interactive Mode")
+    print("Type your question and press Enter")
+    print("Press 1 or type 'exit' to quit\n")
+
+    # Load artifacts once
+    art = load_artifacts(data_dir)
+    # Init the chunker ONCE (reuses sentence-transformers model in memory)
+    chunker = SemanticChunker(model_name=CONFIG['embedding_model'])
+    # Create searcher instances once
+    from src.retrieval.local_search import LocalSearcher
+    from src.retrieval.global_search import GlobalSearcher
+    localer = LocalSearcher(art['kg'], art['chunk_embeddings'], CONFIG)
+    globaler = GlobalSearcher(art['community_summaries'], art['community_embeddings'], CONFIG)
+
+    ollama_client = OllamaClient(CONFIG.get('ollama_model','mistral:latest'))
+
+    while True:
+        q = input("Ask a question ➜ ").strip()
+        if q in {"1", "exit", "quit"}:
+            print("Exiting AmbedkarGPT. Goodbye!")
+            break
+        if not q:
+            print("Please enter a valid question.\n")
+            continue
+
+        # Only compute the query embedding (fast) — do NOT reload the model
+        q_emb = chunker.model.encode(q)
+
+        # Local & Global search (use existing searchers / artifacts)
+        local_results = localer.local_graph_rag_search(q_emb, top_k=CONFIG['local_top_k'])
+        global_results = globaler.global_graph_rag_search(q_emb, art['chunk_texts'], art['chunk_embeddings'], top_k=CONFIG['global_top_k'])
+
+        # Build context: keep it small — top few chunks only
+        context_items = []
+        cited_chunks = set()
+        for r in local_results[:3]:   # only top 3 local chunks
+            cid = r['chunk_id']; cited_chunks.add(cid)
+            context_items.append(f"[Local chunk {cid}]: {art['chunk_texts'][cid][:300]}")
+        for pid, score in global_results[:2]:  # top 2 global
+            if pid in art['chunk_texts']:
+                cited_chunks.add(pid)
+                context_items.append(f"[Global chunk {pid}]: {art['chunk_texts'][pid][:300]}")
+        # include top community summaries (limit size)
+        comm_keys = list(art['community_summaries'].keys())[:CONFIG['global_top_k']]
+        for cid in comm_keys:
+            summ = art['community_summaries'][cid]
+            context_items.append(f"[Community {cid} summary]: {summ[:500]}")
+
+        context = '\n\n'.join(context_items)
+        prompt = TEMPLATE.format(context=context, question=q)
+
+        # Call the LLM (this is still the main time consumer)
+        ans = ollama_client.generate(prompt, max_tokens=CONFIG.get('max_answer_tokens', 150))
+        print('\n=== Answer ===\n')
+        print(ans)
+        print('\n=== Cited chunks ===\n')
+        print('\n'.join(sorted(list(cited_chunks))))
+        print('\n---\n')
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -139,3 +229,5 @@ if __name__ == '__main__':
         build_pipeline(args.pdf, args.out)
     if args.query:
         answer_query(args.query, args.out)
+    else:
+        query(args.out)

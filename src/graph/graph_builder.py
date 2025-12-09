@@ -5,7 +5,6 @@ from collections import defaultdict
 class KnowledgeGraph:
     def __init__(self):
         self.G = nx.Graph()
-        # mapping entity -> set(chunks)
         self.entity_chunks = defaultdict(set)
 
     def add_chunk_entities(self, chunk_id: str, entities, relations):

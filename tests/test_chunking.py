@@ -1,7 +1,37 @@
 from src.chunking.semantic_chunker import SemanticChunker
+from pathlib import Path
+import pdfplumber
+import yaml
 
-def test_chunking_basic():
-    s = "This is sentence one. This is sentence two that continues the idea. A new topic starts here."
-    sc = SemanticChunker(buffer_size=1, theta=0.7)
-    chunks = sc.process_document(s)
-    assert len(chunks) >= 1
+BASE_DIR = Path(__file__).resolve().parents[1]
+CONFIG = yaml.safe_load(open(BASE_DIR / "config.yaml"))
+
+def load_pdf_text():
+    pdf_path = BASE_DIR / "data" / "Ambedkar_book.pdf"
+    text = ""
+    with pdfplumber.open(pdf_path) as pdf:
+        for p in pdf.pages[:5]:   # sample first 5 pages for speed
+            text += p.extract_text() + "\n"
+    return text
+
+def test_semantic_chunking_produces_chunks():
+    text = load_pdf_text()
+    chunker = SemanticChunker(
+        model_name=CONFIG['embedding_model'],
+        buffer_size=CONFIG['buffer_size'],
+        theta=CONFIG['cosine_threshold']
+    )
+
+    chunks = chunker.process_document(text)
+
+    assert len(chunks) > 0, "Semantic chunking returned no chunks"
+
+def test_chunks_have_embeddings():
+    text = load_pdf_text()
+    chunker = SemanticChunker(model_name=CONFIG['embedding_model'])
+
+    chunks = chunker.process_document(text)
+
+    for c in chunks[:5]:
+        assert "embedding" in c
+        assert len(c["embedding"]) > 0
