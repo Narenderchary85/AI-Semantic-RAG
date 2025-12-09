@@ -1,0 +1,11 @@
+embedding_model: all-MiniLM-L6-v2
+token_limit: 1024
+subchunk_overlap: 128
+subchunk_max: 128
+buffer_size: 5 # default buffer
+cosine_threshold: 0.75
+tau_e: 0.65
+tau_d: 0.6
+local_top_k: 5
+global_top_k: 3
+ollama_model: mistral
