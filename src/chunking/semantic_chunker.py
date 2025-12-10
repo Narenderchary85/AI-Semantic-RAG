@@ -9,7 +9,6 @@ from nltk import sent_tokenize
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
 
-# simple token estimation using whitespace (approx)
 def token_count(text: str) -> int:
     return len(text.split())
 
@@ -26,7 +25,6 @@ class SemanticChunker:
         return sent_tokenize(text)
 
     def buffer_merge(self, sentences: List[str]) -> List[str]:
-        # create merged sentences windows centered on each sentence
         merged = []
         n = len(sentences)
         b = self.buffer_size
@@ -34,7 +32,6 @@ class SemanticChunker:
             left = max(0, i - b)
             right = min(n, i + b + 1)
             merged.append(' '.join(sentences[left:right]))
-        # deduplicate while maintaining order
         seen = set(); out = []
         for s in merged:
             if s not in seen:
@@ -45,7 +42,6 @@ class SemanticChunker:
         return self.model.encode(sentences, show_progress_bar=False)
 
     def semantic_grouping(self, sentences: List[str]) -> List[str]:
-        # steps: buffer merge -> embed -> cosine adjacent -> chunk
         merged = self.buffer_merge(sentences)
         if not merged:
             return []
@@ -54,14 +50,12 @@ class SemanticChunker:
         current = merged[0]
         for i in range(len(merged)-1):
             d = 1 - cosine_similarity([embeddings[i]], [embeddings[i+1]])[0][0]
-            # if cosine distance < theta -> similar
             if d < (1 - self.theta):
                 current += ' ' + merged[i+1]
             else:
                 chunks.append(current)
                 current = merged[i+1]
         chunks.append(current)
-        # now enforce token limits with overlapping subchunks
         final = []
         for c in chunks:
             if token_count(c) <= self.token_limit:
@@ -82,7 +76,6 @@ class SemanticChunker:
     def process_document(self, text: str) -> List[Dict]:
         sentences = self.split_sentences(text)
         groups = self.semantic_grouping(sentences)
-        # compute embeddings for chunks too
         chunk_embs = self.embed_sentences(groups)
         out = []
         for i,g in enumerate(groups):

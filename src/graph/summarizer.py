@@ -2,7 +2,7 @@ from src.llm.llm_client import OllamaClient
 
 ollama = OllamaClient()
 
-MAX_CHARS = 3000  # prevent Windows overflow
+MAX_CHARS = 3000  
 
 community_text = "Provide your community text here or pass it as an argument"
 safe_text = community_text[:MAX_CHARS]
