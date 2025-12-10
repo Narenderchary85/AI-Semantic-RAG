@@ -3,8 +3,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 class GlobalSearcher:
     def __init__(self, community_summaries, community_embeddings, config):
-        # community_summaries: dict cid->summary_text
-        # community_embeddings: dict cid->vector
         self.comm_summ = community_summaries
         self.comm_emb = community_embeddings
         self.config = config
@@ -18,12 +16,10 @@ class GlobalSearcher:
         return scores[:top_k]
 
     def global_graph_rag_search(self, q_emb, chunk_texts, chunk_embeddings, top_k=3):
-        # 1. find top-K communities relevant to Q
         comm_scores = self.topk_communities(q_emb, top_k=top_k)
         points = []
         for cid, cs in comm_scores:
             chunks = [cid_item for cid_item in chunk_texts.keys() if cid_item.startswith('chunk_')]
-            # score points (sub-pieces) inside each chunk by similarity
             for cid_chunk in chunks:
                 emb = chunk_embeddings.get(cid_chunk)
                 if emb is None:

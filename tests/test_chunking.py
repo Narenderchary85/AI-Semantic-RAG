@@ -10,7 +10,7 @@ def load_pdf_text():
     pdf_path = BASE_DIR / "data" / "Ambedkar_book.pdf"
     text = ""
     with pdfplumber.open(pdf_path) as pdf:
-        for p in pdf.pages[:5]:   # sample first 5 pages for speed
+        for p in pdf.pages[:5]:  
             text += p.extract_text() + "\n"
     return text
 
