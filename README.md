@@ -39,5 +39,3 @@ Structure:
      ```bash
       python -m src.pipeline.ambedkargpt.py --query "Who is Annihilation in Caste?"
 
-
-
